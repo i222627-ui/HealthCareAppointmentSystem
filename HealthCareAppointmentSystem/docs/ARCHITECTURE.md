@@ -1,0 +1,89 @@
+# Architecture Document — HealthCare Appointment System
+
+## 1. Overview
+
+A comprehensive, enterprise-grade healthcare appointment booking and management system built with **ASP.NET Core MVC (.NET 8)**, using **Entity Framework Core** for data access and **ASP.NET Core Identity** for authentication and robust role-based authorization.
+
+The system supports **seven distinct roles** with isolated workflows:
+- **Admin** — Manages accounts across all roles, system-wide audit logs. Has full visibility over the platform via a centralized dashboard.
+- **Accountant** — Manages the Platform Escrow Wallet, processes user wire withdrawal requests (with 2% dynamic fee auto-deduction and 100% rejection refunds), and reconciles digital vs physical cash flows.
+- **Doctor** — Manages their daily schedule, orders external lab tests, tracks incoming digital wallet earnings, and reviews patient feedback.
+- **Pharmacist** — Manages digital prescriptions, sets medication pricing, and processes hybrid (cash + wallet) payments routing 5% platform commission to escrow.
+- **Lab Technician** — Receives lab test orders, bills the patient, generates tracking Sample IDs, and uploads PDF diagnostic results, automatically routing 10% commission to the platform.
+- **Receptionist** — Handles on-site operations. Manages the "Cash Drawer", issues refunds for cancelled appointments, and deposits physical cash to the Accountant.
+- **Patient** — Books appointments, tracks history, reviews their Electronic Health Records (EHR) & Lab Results, deposits digital funds via Stripe Checkout, and purchases medicine via Wallet Escrow.
+
+## 2. Architectural Pattern
+
+The project follows the **ASP.NET Core MVC** pattern (Model-View-Controller) utilizing a direct-to-DbContext architecture, suitable for rapid iteration and clear data flow. 
+
+```text
+┌─────────────┐      ┌──────────────┐      ┌───────────────────┐      ┌─────────────┐
+│   Browser   │ ───> │  Controllers │ ───> │ ApplicationDbContext│ ───> │ SQL Server  │
+│  (Views/    │ <─── │   (MVC)      │ <─── │      (EF Core)     │ <─── │  (Docker)   │
+│   Razor)    │      └──────────────┘      └───────────────────┘      └─────────────┘
+└─────────────┘             │
+                             ▼
+                      ┌──────────────┐
+                      │ ASP.NET Core │
+                      │   Identity   │
+                      │ (Auth/Roles) │
+                      └──────────────┘
+```
+
+## 3. Core Subsystems
+
+### 3.1 Centralized Wallet Escrow System
+The platform handles all financial transactions via a centralized digital wallet architecture to prevent double spending and ensure immediate payout routing.
+- **Stripe Checkout:** Patients deposit funds securely via Stripe.
+- **Immediate Escrow Splitting:** When an appointment or prescription is paid, the patient's wallet is debited, the provider (Doctor/Pharmacist) is instantly credited their cut (90-95%), and the Platform Escrow Wallet receives the commission (5-10%).
+- **Withdrawal Clearances & 2% Processing Fee:** Providers and patients can request bank withdrawals. The requested amount is instantly debited from their wallet along with a dynamically calculated **2% processing fee**. The Accountant formally wires the cash and approves the `WithdrawalRequest`. If the Accountant rejects the request, the system guarantees a **100% refund**, automatically crediting both the requested amount and the 2% fee back to the user's wallet.
+
+### 3.2 Hybrid Physical/Digital Clearing
+Receptionists and Pharmacists can accept physical cash for low-balance patients.
+- The physical cash received is **instantly debited** from the receiver's digital wallet, balancing the equation.
+- The receptionist runs a routine to "Hand over to Escrow," passing the physical cash to the Accountant to reset their balance.
+
+### 3.3 Two-Step Cancellation Workflow
+To prevent accidental or unilateral cancellations that disrupt scheduling, the system implements a strict two-step cancellation workflow:
+- If a Patient wants to cancel, they trigger a `PatientCancellationRequested` status. The Doctor is notified and must formally confirm it to `Cancelled`.
+- If a Doctor initiates a cancellation, it triggers `DoctorCancellationRequested`, requiring Patient confirmation.
+
+### 3.4 Lab Diagnostics & EHR Workflow
+The system now fully integrates clinical history and testing:
+- **Medical Profiles:** Each patient has a persistent `MedicalProfile` (Blood Group, Allergies, Conditions) visible to Doctors during consultations.
+- **Lab Ordering:** Doctors can order tests (e.g. "Complete Blood Count") directly from the appointment interface.
+- **Diagnostic Billing:** The Lab Technician sets the cost. Payment is collected via the patient's digital wallet (with 10% platform commission routing) before a tracking Sample ID is generated.
+- **Results:** Lab Technicians upload the resulting PDF, which is instantly available in the Patient's "My Lab Results" dashboard and the Doctor's Appointment view.
+
+### 3.4 Telehealth & Real-Time Communications
+To simulate modern virtual care platforms, the system implements a native peer-to-peer video engine:
+- **Signaling via SignalR**: ASP.NET Core SignalR is used to negotiate WebRTC connections (Offers, Answers, ICE candidates) in dedicated group channels (`RoomId`).
+- **WebRTC Peer-to-Peer Video**: The frontend securely captures local `MediaStream` tracks and pipes them directly to the remote peer via an `RTCPeerConnection`, bypassing the need for third-party SDKs (like Twilio or Zoom) and lowering latency.
+
+### 3.5 Automated Background Workers
+The architecture includes an `IHostedService` (`AppointmentReminderService`) acting as a cron job that periodically queries the database for upcoming appointments (e.g., 24 hours away) and automatically triggers reminder notifications asynchronously, ensuring zero impact on user-facing request latency.
+
+### 3.6 Audit Logging
+All critical state changes (appointment bookings, invoice payments, refunds, withdrawals, admin actions, automated reminders) are intercepted and logged into an `AuditLogs` table. The Admin dashboard provides a real-time, scrollable view of these logs for system compliance and monitoring.
+
+## 4. UI/UX Architecture
+
+- **Premium CSS System:** Built without heavy frontend SPA frameworks (React/Angular), the UI achieves a modern SaaS look using pure CSS variables, flexbox, and grid.
+- **Global Toast Notifications:** A centralized, animated notification system that intercepts `TempData` across the entire application and displays elegant, auto-dismissing toast alerts.
+- **Global Custom Modals:** A JS DOM-mutation script intercepts all native `confirm()` dialogs across the platform and replaces them with a highly polished, blurred-background custom HTML modal.
+- **DataTables Integration:** All major entity lists (Audit Logs, Accounts, Patients, Doctors) are powered by jQuery DataTables.
+
+## 5. Application Layers
+
+### 5.1 Models (`/Models`)
+Rich domain entities mapped via EF Core.
+- `ApplicationUser`: Extends `IdentityUser`.
+- `Doctor`, `Patient`, `Pharmacist`, `LabTechnician`: Profile entities linked 1:1 with `ApplicationUser`.
+- `MedicalProfile`: Linked 1:1 with `Patient` for Electronic Health Records.
+- `Wallet`, `WalletTransaction`, `WithdrawalRequest`: Financial system.
+- `Prescription`, `Invoice`, `LabOrder`, `LabResult`: Billing and Clinical systems.
+
+### 5.2 Data Access (`/Data`)
+- `ApplicationDbContext`: Inherits `IdentityDbContext<ApplicationUser>`, configuring all database relationships via the Fluent API.
+- `DbInitializer`: Highly sophisticated seeder that injects patients, doctors, and realistic appointments for immediate testing.

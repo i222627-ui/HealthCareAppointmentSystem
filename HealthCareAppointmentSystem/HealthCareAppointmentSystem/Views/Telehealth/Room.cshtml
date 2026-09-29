@@ -1,0 +1,219 @@
+@{
+    ViewData["Title"] = "Telehealth Consultation";
+    Layout = null; // No global layout to maximize screen real estate
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - HealthCare System</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <style>
+        * { box-sizing: border-box; }
+        body { background-color: #0f0f1a; color: white; display: flex; flex-direction: column; height: 100vh; overflow: hidden; margin: 0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+        .header { padding: 1rem 2rem; background: #151522; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #2a2a4a; z-index: 20; box-shadow: 0 2px 10px rgba(0,0,0,0.5); }
+        .video-container { flex: 1; display: flex; justify-content: center; align-items: center; padding: 1.5rem; position: relative; overflow: hidden; min-height: 0; background-image: radial-gradient(circle at center, #1a1a2e 0%, #0f0f1a 100%); }
+        .main-video { width: 100%; height: 100%; max-width: 1600px; background: #000; border-radius: 16px; display: flex; justify-content: center; align-items: center; box-shadow: 0 10px 40px rgba(0,0,0,0.6); border: 1px solid #2a2a4a; overflow: hidden; position: relative; }
+        .self-video { position: absolute; bottom: 1.5rem; right: 1.5rem; width: 260px; aspect-ratio: 16/9; background: #1a1a2e; border-radius: 12px; border: 2px solid #3a3a5a; display: flex; justify-content: center; align-items: center; z-index: 10; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,0.8); transition: transform 0.3s ease; }
+        .self-video:hover { transform: scale(1.05); border-color: #4a4a7a; }
+        .controls { padding: 1.2rem; background: #151522; display: flex; justify-content: center; gap: 1.5rem; border-top: 1px solid #2a2a4a; z-index: 20; }
+        .control-btn { width: 56px; height: 56px; border-radius: 50%; border: none; background: #2a2a4a; color: white; font-size: 1.2rem; cursor: pointer; transition: all 0.2s ease; display: flex; justify-content: center; align-items: center; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        .control-btn:hover { background: #3a3a5a; transform: translateY(-3px); box-shadow: 0 6px 15px rgba(0,0,0,0.4); }
+        .btn-end { background: #e63946; }
+        .btn-end:hover { background: #c12a35; }
+        .pulse { animation: pulse 2s infinite; }
+        @@keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.7; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <h4 style="margin: 0; display: flex; align-items: center; gap: 10px;">
+                <i class="fa-solid fa-shield-halved text-success"></i> Secure Telehealth Room
+            </h4>
+            <span class="text-muted small">ID: @ViewBag.RoomId</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <div id="status-indicator" style="width: 10px; height: 10px; border-radius: 50%; background: #e63946;" class="pulse"></div>
+            <span id="status-text">Connecting...</span>
+        </div>
+    </div>
+
+    <div class="video-container">
+        <div class="main-video">
+            <div id="waiting-screen" style="text-align: center;">
+                <i class="fa-solid fa-user-doctor" style="font-size: 5rem; color: #4a4a7a; margin-bottom: 1rem;"></i>
+                <h3 style="color: #6a6a9a;">Waiting for participant to join...</h3>
+            </div>
+            <video id="remoteVideo" autoplay playsinline style="width: 100%; height: 100%; object-fit: contain; display: none;"></video>
+            
+            <div class="self-video">
+                <i id="local-placeholder" class="fa-regular fa-user" style="font-size: 3rem; color: #6a6a9a;"></i>
+                <video id="localVideo" autoplay playsinline muted style="width: 100%; height: 100%; object-fit: cover; display: none; transform: scaleX(-1);"></video>
+            </div>
+        </div>
+    </div>
+
+    <div class="controls">
+        <button id="btn-mic" class="control-btn" title="Toggle Microphone"><i class="fa-solid fa-microphone"></i></button>
+        <button id="btn-cam" class="control-btn" title="Toggle Camera"><i class="fa-solid fa-video"></i></button>
+        <button id="btn-end" class="control-btn btn-end" title="End Call"><i class="fa-solid fa-phone-slash"></i></button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
+    <script>
+        const localVideo = document.getElementById('localVideo');
+        const remoteVideo = document.getElementById('remoteVideo');
+        const waitingScreen = document.getElementById('waiting-screen');
+        const localPlaceholder = document.getElementById('local-placeholder');
+        const roomId = "@ViewBag.RoomId";
+
+        let localStream;
+        let peerConnection;
+        let isMicOn = true;
+        let isCamOn = true;
+
+        const configuration = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' }
+            ]
+        };
+
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl("/telehealthHub")
+            .withAutomaticReconnect()
+            .build();
+
+        async function start() {
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                localPlaceholder.style.display = 'none';
+                localVideo.style.display = 'block';
+                localVideo.srcObject = localStream;
+                
+                await connection.start();
+                document.getElementById('status-text').innerText = "Connected to Server";
+                document.getElementById('status-indicator').style.background = "#2ecc71";
+                
+                await connection.invoke("JoinRoom", roomId);
+            } catch (err) {
+                console.error(err);
+                document.getElementById('status-text').innerText = "Camera/Mic Error";
+                alert("Could not access camera/microphone or connect to server. Please ensure you have granted permissions.");
+            }
+        }
+
+        function createPeerConnection() {
+            const pc = new RTCPeerConnection(configuration);
+            
+            localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+            
+            pc.onicecandidate = event => {
+                if (event.candidate) {
+                    connection.invoke("SendIceCandidate", roomId, JSON.stringify(event.candidate));
+                }
+            };
+            
+            pc.ontrack = event => {
+                remoteVideo.srcObject = event.streams[0];
+                remoteVideo.style.display = 'block';
+                waitingScreen.style.display = 'none';
+            };
+            
+            return pc;
+        }
+
+        connection.on("UserJoined", async (connectionId) => {
+            console.log("User joined, creating offer...");
+            peerConnection = createPeerConnection();
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+            connection.invoke("SendOffer", roomId, JSON.stringify(offer));
+        });
+
+        connection.on("ReceiveOffer", async (connectionId, offer) => {
+            console.log("Received offer, creating answer...");
+            peerConnection = createPeerConnection();
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(JSON.parse(offer)));
+            const answer = await peerConnection.createAnswer();
+            await peerConnection.setLocalDescription(answer);
+            connection.invoke("SendAnswer", roomId, JSON.stringify(answer));
+        });
+
+        connection.on("ReceiveAnswer", async (connectionId, answer) => {
+            console.log("Received answer...");
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(JSON.parse(answer)));
+        });
+
+        connection.on("ReceiveIceCandidate", async (connectionId, candidate) => {
+            try {
+                if(peerConnection) {
+                    await peerConnection.addIceCandidate(new RTCIceCandidate(JSON.parse(candidate)));
+                }
+            } catch (e) {
+                console.error("Error adding received ice candidate", e);
+            }
+        });
+
+        connection.on("UserLeft", (connectionId) => {
+            console.log("User left...");
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+            remoteVideo.srcObject = null;
+            remoteVideo.style.display = 'none';
+            waitingScreen.querySelector('h3').innerText = "Participant left the call. Waiting for them to rejoin...";
+            waitingScreen.style.display = 'block';
+        });
+
+        document.getElementById('btn-mic').addEventListener('click', function() {
+            if(!localStream) return;
+            isMicOn = !isMicOn;
+            localStream.getAudioTracks()[0].enabled = isMicOn;
+            const icon = this.querySelector('i');
+            if(isMicOn) {
+                icon.classList.replace('fa-microphone-slash', 'fa-microphone');
+                this.style.background = '#3a3a5a';
+            } else {
+                icon.classList.replace('fa-microphone', 'fa-microphone-slash');
+                this.style.background = '#e63946';
+            }
+        });
+
+        document.getElementById('btn-cam').addEventListener('click', function() {
+            if(!localStream) return;
+            isCamOn = !isCamOn;
+            localStream.getVideoTracks()[0].enabled = isCamOn;
+            const icon = this.querySelector('i');
+            if(isCamOn) {
+                icon.classList.replace('fa-video-slash', 'fa-video');
+                this.style.background = '#3a3a5a';
+            } else {
+                icon.classList.replace('fa-video', 'fa-video-slash');
+                this.style.background = '#e63946';
+            }
+        });
+
+        document.getElementById('btn-end').addEventListener('click', function() {
+            if (peerConnection) peerConnection.close();
+            connection.stop();
+            if(localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+            }
+            window.close();
+        });
+
+        // Initialize WebRTC and SignalR
+        start();
+    </script>
+</body>
+</html>

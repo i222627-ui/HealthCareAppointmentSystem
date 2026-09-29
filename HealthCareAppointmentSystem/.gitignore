@@ -1,0 +1,33 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+## Rider / VS Code
+.idea/
+.vscode/
+
+## Build results
+[Dd]ebug/
+[Rr]elease/
+
+## User-specific files
+*.userosscache
+*.sln.docstates
+
+## Secrets
+appsettings.Production.json
+appsettings.json
+appsettings.Development.json
+*.pfx
+
+## Deployment & Logs
+publish/
+*.zip
+webapp_logs/
+*.log
+deploy_cloud.bat
+HealthCareAppointmentSystem/wwwroot/images/profiles/*
+!HealthCareAppointmentSystem/wwwroot/images/profiles/.keep

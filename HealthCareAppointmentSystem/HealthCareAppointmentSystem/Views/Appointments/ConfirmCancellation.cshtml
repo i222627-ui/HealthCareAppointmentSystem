@@ -1,0 +1,61 @@
+@model HealthCareAppointmentSystem.Models.Appointment
+
+@{
+    ViewData["Title"] = "Confirm Cancellation";
+}
+
+<div class="page-header">
+    <h1>Confirm Cancellation</h1>
+</div>
+
+<div class="auth-container" style="max-width: 600px; margin: 2rem auto;">
+    <div class="auth-card">
+        <h3>Confirm Cancellation Request</h3>
+        
+        <div style="background-color: var(--background); padding: 1rem; border-radius: 0.5rem; margin-bottom: 1.5rem;">
+            <p><strong>Appointment ID:</strong> #APT-@Model.Id.ToString("D4")</p>
+            <p><strong>Date & Time:</strong> @Model.AppointmentDateTime.ToString("dd MMM yyyy, hh:mm tt")</p>
+            @if (Model.Invoice != null)
+            {
+                <p><strong>Payment Status:</strong> @Model.Invoice.Status</p>
+            }
+        </div>
+
+        <form asp-action="ConfirmCancellation" method="post" enctype="multipart/form-data">
+            <input type="hidden" asp-for="Id" />
+            
+            <div asp-validation-summary="ModelOnly" class="text-danger" style="color: var(--danger); margin-bottom: 1rem;"></div>
+
+            @if ((User.IsInRole("Doctor") || User.IsInRole("Admin")) && Model.Status == HealthCareAppointmentSystem.Models.AppointmentStatus.PatientCancellationRequested)
+            {
+                if (Model.Invoice != null && Model.Invoice.Status == HealthCareAppointmentSystem.Models.PaymentStatus.Paid)
+                {
+                    var refundAmt = Model.Invoice.Amount * 0.70m;
+                    <div class="alert alert-warning" style="background-color: #fef08a; color: #854d0e; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
+                        <strong>Refund Warning:</strong> The patient requested this cancellation. A 70% refund (<strong>@refundAmt.ToString("C")</strong>) will be automatically processed. Your wallet will be deducted accordingly upon confirmation.
+                    </div>
+                }
+                else
+                {
+                    <p style="color: var(--text-light); margin-bottom: 1rem;">The patient requested this cancellation. No refund is required as the appointment has not been paid yet.</p>
+                }
+            }
+            else if (User.IsInRole("Patient") && Model.Status == HealthCareAppointmentSystem.Models.AppointmentStatus.DoctorCancellationRequested)
+            {
+                <p style="color: var(--text-light); margin-bottom: 1rem;">The doctor has requested to cancel this appointment. Please confirm to finalize the cancellation.</p>
+                
+                @if (Model.Invoice != null && Model.Invoice.Status == HealthCareAppointmentSystem.Models.PaymentStatus.Paid)
+                {
+                    <div class="alert alert-info" style="background-color: #e0f2fe; color: #0369a1; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
+                        <strong>Refund Info:</strong> Upon confirming this cancellation, a 100% refund (<strong>@Model.Invoice.Amount.ToString("C")</strong>) will automatically be credited back to your digital wallet.
+                    </div>
+                }
+            }
+
+            <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+                <button type="submit" class="btn btn-danger" style="background-color: var(--danger);">Confirm Cancellation</button>
+                <a asp-action="Index" class="btn btn-secondary">Go Back</a>
+            </div>
+        </form>
+    </div>
+</div>

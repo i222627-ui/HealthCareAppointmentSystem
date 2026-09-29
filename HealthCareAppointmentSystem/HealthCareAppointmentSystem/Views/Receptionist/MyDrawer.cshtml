@@ -1,0 +1,44 @@
+@model HealthCareAppointmentSystem.ViewModels.MyDrawerViewModel
+@{
+    ViewData["Title"] = "My Cash Drawer";
+}
+
+<div class="page-header" style="margin-bottom: 2rem;">
+    <h1>My Cash Drawer</h1>
+    <p>Manage the cash you have collected and hand it over directly to doctors.</p>
+</div>
+
+<div class="dashboard-stats" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); margin-bottom: 2rem; gap: 1rem;">
+    <div class="stat-card" style="background: var(--surface); padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-left: 5px solid var(--success);">
+        <div class="stat-details">
+            <h3 style="margin: 0; font-size: 2.5rem; color: var(--primary);">Rs. @Model.TotalDrawerBalance.ToString("N0")</h3>
+            <p style="margin: 0; color: var(--text-muted);">Total Cash in Drawer</p>
+        </div>
+    </div>
+</div>
+
+<div class="card" style="background: var(--surface); border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); overflow: hidden; margin-bottom: 2rem;">
+    <div class="card-header" style="padding: 1.5rem; border-bottom: 1px solid var(--border-color);">
+        <h2 style="margin: 0; font-size: 1.25rem;">Cash Deposit to Accountant</h2>
+    </div>
+    <div class="card-body" style="padding: 1.5rem;">
+        <p style="color: var(--text-muted); margin-bottom: 1.5rem;">
+            Because all doctor and pharmacist earnings are now handled through the centralized Wallet Escrow, the cash you collect must be deposited to the Platform Accountant. 
+        </p>
+
+        @if (Model.TotalDrawerBalance > 0)
+        {
+            <form method="post" asp-action="HandoverCashToPlatform">
+                <button type="submit" class="btn btn-primary" onclick="return confirm('Are you sure you want to hand over Rs. @Model.TotalDrawerBalance.ToString("N0") to the Accountant? This will reset your drawer to zero.');">
+                    <i class="fa-solid fa-building-columns"></i> Deposit Rs. @Model.TotalDrawerBalance.ToString("N0") to Escrow
+                </button>
+            </form>
+        }
+        else
+        {
+            <div style="padding: 2rem; text-align: center; color: var(--text-muted); border: 1px dashed var(--border-color); border-radius: 8px;">
+                Your cash drawer is empty. No deposits needed.
+            </div>
+        }
+    </div>
+</div>

@@ -1,0 +1,140 @@
+@using HealthCareAppointmentSystem.ViewModels
+@using HealthCareAppointmentSystem.Models
+@model DoctorDashboardViewModel
+
+@{
+    ViewData["Title"] = "Doctor Dashboard";
+}
+
+<div class="page-header">
+    <h1>Welcome, Dr. @Model.DoctorProfile?.ApplicationUser?.FullName</h1>
+</div>
+
+@if (ViewBag.NeedsProfileCompletion == true)
+{
+    <div style="background-color: var(--warning); color: #856404; padding: 1rem; border-radius: 8px; margin-bottom: 2rem; border: 1px solid #ffeeba; display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <strong>Complete Your Profile:</strong> Please add your profile picture and education details to help patients learn more about you.
+        </div>
+        <a asp-controller="Profile" asp-action="Edit" class="btn btn-primary btn-sm">Complete Profile</a>
+    </div>
+}
+
+@if (Model.PendingConfirmationsCount > 0)
+{
+    <div style="background-color: #e8f4fd; color: #004085; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid #b8daff; display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <strong>Action Required:</strong> You have <strong>@Model.PendingConfirmationsCount</strong> new appointment request(s) waiting for your confirmation.
+        </div>
+        <a asp-controller="Appointments" asp-action="Index" class="btn btn-primary btn-sm">View Requests</a>
+    </div>
+}
+
+@if (Model.PendingCompletionsCount > 0)
+{
+    <div style="background-color: #e8f4fd; color: #004085; padding: 1rem; border-radius: 8px; margin-bottom: 2rem; border: 1px solid #b8daff; display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <strong>Recent Appointments:</strong> You have <strong>@Model.PendingCompletionsCount</strong> appointment(s) that have ended. Please mark them as completed.
+        </div>
+        <a asp-controller="Appointments" asp-action="Index" class="btn btn-primary btn-sm">Mark Completed</a>
+    </div>
+}
+
+<div class="feature-grid" style="margin-bottom: 2rem;">
+    <div class="feature-card text-center">
+        <div style="font-size: 2.5rem; margin-bottom: 1rem; color: var(--primary);"><i class="fa-regular fa-calendar-days"></i></div>
+        <h2 style="margin: 0; color: var(--primary);">@Model.TodayAppointmentsCount</h2>
+        <p>Appointments Today</p>
+    </div>
+    
+    <div class="feature-card text-center">
+        <div style="font-size: 2.5rem; margin-bottom: 1rem; color: var(--primary);"><i class="fa-solid fa-calendar-check"></i></div>
+        <h2 style="margin: 0; color: var(--primary);">@Model.UpcomingAppointmentsCount</h2>
+        <p>Total Upcoming</p>
+    </div>
+    
+    <div class="feature-card text-center">
+        <div style="font-size: 2.5rem; margin-bottom: 1rem; color: var(--primary);"><i class="fa-regular fa-clock"></i></div>
+        <h4 style="margin: 0; color: var(--text);">@Model.DoctorProfile?.AvailableFrom.ToString(@"hh\:mm") - @Model.DoctorProfile?.AvailableTo.ToString(@"hh\:mm")</h4>
+        <p>Your Working Hours</p>
+    </div>
+    
+    <div class="feature-card text-center">
+        <div style="font-size: 2.5rem; margin-bottom: 1rem; color: var(--success);"><i class="fa-solid fa-wallet"></i></div>
+        <h2 style="margin: 0; color: var(--success);">Rs. @Model.TotalEarnings.ToString("N0")</h2>
+        <p>Total Earnings</p>
+    </div>
+</div>
+
+<div class="detail-card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h3 style="margin: 0;">Upcoming Appointments</h3>
+        <a asp-controller="Appointments" asp-action="Index" class="btn btn-secondary" style="padding: 0.5rem 1rem;">View All</a>
+    </div>
+
+    @if (Model.UpcomingAppointments.Any())
+    {
+        <table id="doctorAppointmentsTable" class="data-table display responsive nowrap" style="width:100%;">
+            <thead>
+                <tr>
+                    <th>Patient</th>
+                    <th>Date & Time</th>
+                    <th>Status</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var appt in Model.UpcomingAppointments)
+                {
+                    <tr>
+                        <td>@appt.Patient?.ApplicationUser?.FullName</td>
+                        <td>@appt.AppointmentDateTime.ToString("f")</td>
+                        <td>
+                            @{
+                                var isPast = appt.AppointmentDateTime.AddMinutes(appt.Doctor?.SlotDurationMinutes ?? 20) <= DateTime.Now;
+                                var statusText = appt.Status.ToString();
+                                
+                                if ((appt.Status == AppointmentStatus.Pending || appt.Status == AppointmentStatus.Confirmed) && isPast)
+                                {
+                                    statusText = "Completed (Pending Review)";
+                                }
+                            }
+                            <span class="status-badge status-@(appt.Status.ToString().ToLower())" style="@(statusText.Contains("Review") ? "background-color: var(--warning); color: #856404;" : "")">@statusText</span>
+                        </td>
+                        <td style="display: flex; gap: 0.5rem; align-items: center;">
+                            @if (appt.Type == HealthCareAppointmentSystem.Models.AppointmentType.VideoCall && !string.IsNullOrEmpty(appt.MeetingLink))
+                            {
+                                var timeUntil = appt.AppointmentDateTime - HealthCareAppointmentSystem.Helpers.TimeHelper.Now;
+                                if (timeUntil.TotalMinutes <= 10 && appt.Status != HealthCareAppointmentSystem.Models.AppointmentStatus.Cancelled && appt.Status != HealthCareAppointmentSystem.Models.AppointmentStatus.Completed)
+                                {
+                                    <a href="@appt.MeetingLink" target="_blank" class="btn btn-success btn-sm" title="Join Call"><i class="fa-solid fa-video"></i></a>
+                                }
+                                else if (appt.Status == HealthCareAppointmentSystem.Models.AppointmentStatus.Pending || appt.Status == HealthCareAppointmentSystem.Models.AppointmentStatus.Confirmed)
+                                {
+                                    <button class="btn btn-secondary btn-sm" disabled title="Available 10 mins before"><i class="fa-solid fa-video"></i></button>
+                                }
+                            }
+                            <a asp-controller="Appointments" asp-action="Edit" asp-route-id="@appt.Id" class="btn btn-primary btn-sm">Manage</a>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+    else
+    {
+        <p class="text-muted">You have no upcoming appointments.</p>
+    }
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function () {
+            $('#doctorAppointmentsTable').DataTable({
+                "responsive": true,
+                "order": [[1, "asc"]],
+                "pageLength": 10
+            });
+        });
+    </script>
+}

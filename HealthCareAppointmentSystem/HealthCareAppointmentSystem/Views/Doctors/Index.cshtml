@@ -1,0 +1,80 @@
+@model IEnumerable<Doctor>
+@{
+    ViewData["Title"] = "Doctors";
+}
+
+<div class="page-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 2rem;">
+    <h1 style="margin: 0;">Doctors</h1>
+    <a asp-action="Create" class="btn btn-primary" style="display: flex; align-items: center; gap: 0.5rem;">
+        <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+        Add Doctor
+    </a>
+</div>
+
+<div style="background: var(--card-bg); border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); border: 1px solid var(--border); padding: 1.5rem; overflow-x: auto;">
+    <table id="doctorsTable" class="data-table" style="width:100%;">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Specialization</th>
+            <th>License #</th>
+            <th>Experience</th>
+            <th>Fee</th>
+            <th>Status</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var item in Model)
+        {
+            <tr>
+                <td><span style="color: var(--secondary); font-family: monospace;">#DOC-@item.Id.ToString("D4")</span></td>
+                <td>Dr. @item.ApplicationUser?.FullName</td>
+                <td>@item.Specialization?.Name</td>
+                <td>@item.LicenseNumber</td>
+                <td>@item.YearsOfExperience yrs</td>
+                <td>Rs. @item.ConsultationFee.ToString("N0")</td>
+                <td>
+                    @if (item.IsApproved)
+                    {
+                        <span class="status-badge status-completed">Approved</span>
+                    }
+                    else
+                    {
+                        <span class="status-badge status-pending">Pending</span>
+                    }
+                </td>
+                <td class="actions" style="display: flex; gap: 0.5rem; align-items: center;">
+                    @if (!item.IsApproved)
+                    {
+                        <form asp-action="Approve" asp-route-id="@item.Id" method="post" style="display:inline;">
+                            <button type="submit" class="btn-action btn-action-success">APPROVE</button>
+                        </form>
+                    }
+                    <a asp-action="Details" asp-route-id="@item.Id" class="btn-action btn-action-secondary">DETAILS</a>
+                    <a asp-action="Edit" asp-route-id="@item.Id" class="btn-action btn-action-primary">EDIT</a>
+                    <form asp-action="Delete" asp-route-id="@item.Id" method="post" style="display:inline;" onsubmit="return confirm('Are you sure you want to permanently delete this doctor profile?');">
+                        <button type="submit" class="btn-action btn-action-danger">DELETE</button>
+                    </form>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function() {
+            $('#doctorsTable').DataTable({
+                "pageLength": 10,
+                "ordering": true,
+                "responsive": true,
+                "language": {
+                    "search": "Filter:"
+                }
+            });
+        });
+    </script>
+}
